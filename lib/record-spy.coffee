@@ -1,3 +1,4 @@
+fs          = require 'fs'
 https       = require 'https'
 urlUtil     = require 'url'
 request     = require 'request'
@@ -11,6 +12,8 @@ exports = module.exports = () ->
 
   # We return this unnnamed object (class)
   cookieJar: request.jar()
+
+  transcriptRaw: (if fs.existsSync('./tempTranscript.html') then (fs.readFileSync './tempTranscript.html') else false)
 
   urlSet:
     'login-get':
@@ -69,7 +72,8 @@ exports = module.exports = () ->
   processTranscriptRaw: (callback)->
     err = null
     classList = []
-    callback(err, classList)
+    fs.writeFile './tempTranscript.html', @transcriptRaw, (err)->
+      callback(err, classList)
 
 
 
