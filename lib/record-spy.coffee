@@ -17,6 +17,8 @@ exports = module.exports = () ->
       "https://oscar.gatech.edu/pls/bprod/twbkwbis.P_WWWLogin"
     "login-post":
       "https://oscar.gatech.edu/pls/bprod/twbkwbis.P_ValLogin"
+    "transcript-get":
+      "https://oscar.gatech.edu/pls/bprod/bwskotrn.P_ViewTran"
 
   authenticate: (userId, userPass, callback=(()->return)) ->
     @apiCall 'login-get', (err, data) =>
@@ -24,8 +26,30 @@ exports = module.exports = () ->
         method: 'POST'
         sid: userId
         PIN: userPass
+        , (err,body='') =>
+          @authenticated = !!body.match(/Welcome/ig)
+          callback(@authenticated)
+
+  pullTranscript: (userId, userPass, callback=(()->return)) ->
+    if not @authenticated
+      @authenticate userId, userPass, (authSuccess)=>
+        if not authSuccess
+          return callback(false)
+        @apiCall 'transcript-get',
+          method: 'POST'
+          levl: ''
+          tprt: 'ADVW'
+          , (err,body='')->
+            console.log(body);
+            callback()
+    else
+      @apiCall 'transcript-get',
+        method: 'POST'
+        levl: ''
+        tprt: 'ADVW'
         , (err,body='')->
-          callback(!!body.match(/Welcome/i))
+          console.log(body);
+          callback()
 
   apiCall: (method, data={}, callback) ->
     if typeof data is 'function' and not callback
