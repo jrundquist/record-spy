@@ -1,17 +1,20 @@
 recordSpy = require('../')
 should    = require('should')
 
+reverse = (s) ->
+  s.split('').reverse().join('')
+
 describe 'Auth', () ->
 
-  describe '.auth(url)', ()->
-    it 'should make requests?', (done) ->
-      spy = recordSpy();
-      spy.authenticate process.env.GTID, process.env.GTPIN, (success)->
-        success.should.be.true
+  before ()=>
+    @spy = recordSpy()
+
+  describe '.authenticate(ID, PIN, callback)', () =>
+    it 'should make fail on wrong credentials', (done) =>
+      @spy.authenticate reverse(process.env.GTID), reverse(process.env.GTPIN), (success)->
+        success.should.be.false
         done()
-  describe '.pullTranscript', ()->
-    it 'should make requests', (done) ->
-      spy = recordSpy();
-      spy.pullTranscript process.env.GTID, process.env.GTPIN, (success)->
-        console.log(arguments)
+    it 'should return true on success', (done) =>
+      @spy.authenticate process.env.GTID, process.env.GTPIN, (success) ->
+        success.should.be.true
         done()

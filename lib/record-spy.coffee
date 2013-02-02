@@ -1,8 +1,8 @@
-https   = require 'https'
-urlUtil = require 'url'
-request = require 'request'
+https       = require 'https'
+urlUtil     = require 'url'
+request     = require 'request'
 querystring = require 'querystring'
-constants = require('constants')
+constants   = require 'constants'
 
 userAgentString = 'CourseShark Record-Crawler/nodejs 0.0.1'
 
@@ -13,12 +13,12 @@ exports = module.exports = () ->
   cookieJar: request.jar()
 
   urlSet:
-    "login-get":
-      "https://oscar.gatech.edu/pls/bprod/twbkwbis.P_WWWLogin"
-    "login-post":
-      "https://oscar.gatech.edu/pls/bprod/twbkwbis.P_ValLogin"
-    "transcript-get":
-      "https://oscar.gatech.edu/pls/bprod/bwskotrn.P_ViewTran"
+    'login-get':
+      'https://oscar.gatech.edu/pls/bprod/twbkwbis.P_WWWLogin'
+    'login-post':
+      'https://oscar.gatech.edu/pls/bprod/twbkwbis.P_ValLogin'
+    'transcript-get':
+      'https://oscar.gatech.edu/pls/bprod/bwskotrn.P_ViewTran'
 
   authenticate: (userId, userPass, callback=(()->return)) ->
     @apiCall 'login-get', (err, data) =>
@@ -27,37 +27,60 @@ exports = module.exports = () ->
         sid: userId
         PIN: userPass
         , (err,body='') =>
-          @authenticated = !!body.match(/Welcome/ig)
+          @authenticated = not not body.match(/Welcome/ig)
           callback(@authenticated)
 
   pullTranscript: (userId, userPass, callback=(()->return)) ->
-    if not @authenticated
-      @authenticate userId, userPass, (authSuccess)=>
-        if not authSuccess
-          return callback(false)
-        @apiCall 'transcript-get',
-          method: 'POST'
-          levl: ''
-          tprt: 'ADVW'
-          , (err,body='')->
-            console.log(body);
-            callback()
-    else
+    makeCall = ()=>
       @apiCall 'transcript-get',
         method: 'POST'
         levl: ''
         tprt: 'ADVW'
-        , (err,body='')->
-          console.log(body);
-          callback()
+        , (err,body='') =>
+          @transcriptRaw = body
+          callback(err, body)
+
+    # Login if need be
+    if not @authenticated
+      @authenticate userId, userPass, (authSuccess)=>
+        if not authSuccess
+          return callback new Error 'Incorrect authentication credentials'
+        makeCall()
+    else
+      makeCall()
+
+
+
+
+  getTranscriptClasses: (userId, userPass, callback=(()->return)) ->
+    if not @transcriptRaw
+      @pullTranscript userId, userPass, (err)=>
+        if err
+          return callback err
+        if not @authenticated
+          return callback new Error 'Incorrect authentication credentials'
+        @processTranscriptRaw(callback)
+    else
+      @processTranscriptRaw(callback)
+
+
+
+
+  processTranscriptRaw: (callback)->
+    err = null
+    classList = []
+    callback(err, classList)
+
+
+
 
   apiCall: (method, data={}, callback) ->
     if typeof data is 'function' and not callback
       [callback, data] = [data, callback]
       data = {}
     url = @urlSet[ method.toLowerCase() ]
-    method = data["method"] || "GET"
-    delete data["method"]
+    method = data['method'] || 'GET'
+    delete data['method']
     @download(url, data, method, callback)
 
 
