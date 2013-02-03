@@ -13,7 +13,7 @@ exports = module.exports = () ->
   # We return this unnnamed object (class)
   cookieJar: request.jar()
 
-  transcriptRaw: (if fs.existsSync('./tempTranscript.html') then (fs.readFileSync './tempTranscript.html') else false)
+  transcriptRaw: (if fs.existsSync('./tempTranscript.html') then ""+(fs.readFileSync './tempTranscript.html') else false)
 
   urlSet:
     'login-get':
@@ -24,6 +24,9 @@ exports = module.exports = () ->
       'https://oscar.gatech.edu/pls/bprod/bwskotrn.P_ViewTran'
 
   authenticate: (userId, userPass, callback=(()->return)) ->
+    if process.env.NODE_ENV is 'test!'
+      @authenticated = (userPass.toString() is process.env.GTPIN.toString())
+      return callback(@authenticated)
     @apiCall 'login-get', (err, data) =>
       @apiCall 'login-post',
         method: 'POST'
@@ -42,6 +45,10 @@ exports = module.exports = () ->
         , (err,body='') =>
           @transcriptRaw = body
           callback(err, body)
+
+    # Return if we have it TODO REMOVE THIS
+    if @transcriptRaw
+      return callback(null, @transcriptRaw)
 
     # Login if need be
     if not @authenticated
@@ -69,11 +76,22 @@ exports = module.exports = () ->
 
 
 
-  processTranscriptRaw: (callback)->
-    err = null
-    classList = []
-    fs.writeFile './tempTranscript.html', @transcriptRaw, (err)->
-      callback(err, classList)
+  processTranscriptRaw: (callback) ->
+    fs.writeFile './tempTranscript.html', @transcriptRaw, (err) =>
+      if err then return callback(err)
+      err = null
+      classList = []
+      classMap = {}
+      classRegex = '<TR>\\n<TD\\sCLASS="dddefault">([A-Z]+)</TD>\\n<TD\\s(?:COLSPAN="2"\\s)?CLASS="dddefault">([0-9X]+)</TD>'
+
+      classesRaw = @transcriptRaw.match new RegExp classRegex, 'ig'
+      for classInfo in classesRaw
+        info   = (classInfo.match new RegExp classRegex, 'i') || []
+        dep    = info[1]||''
+        number = info[2]||''
+        classList.push number: number, department: dep
+        if classMap[dep] then classMap[dep].push number else classMap[dep] = [number]
+      callback(err, classList, classMap)
 
 
 

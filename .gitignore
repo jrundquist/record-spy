@@ -6,7 +6,7 @@ lib-cov
 *.out
 *.pid
 *.gz
-*.html
+tempTranscript.html
 
 pids
 logs
