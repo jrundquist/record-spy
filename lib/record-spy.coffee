@@ -13,8 +13,6 @@ exports = module.exports = () ->
   # We return this unnnamed object (class)
   cookieJar: request.jar()
 
-  transcriptRaw: (if fs.existsSync('./tempTranscript.html') then ""+(fs.readFileSync './tempTranscript.html') else false)
-
   urlSet:
     'login-get':
       'https://oscar.gatech.edu/pls/bprod/twbkwbis.P_WWWLogin'
@@ -23,10 +21,27 @@ exports = module.exports = () ->
     'transcript-get':
       'https://oscar.gatech.edu/pls/bprod/bwskotrn.P_ViewTran'
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   authenticate: (userId, userPass, callback=(()->return)) ->
-    if process.env.NODE_ENV is 'test!'
-      @authenticated = (userPass.toString() is process.env.GTPIN.toString())
-      return callback(@authenticated)
     @apiCall 'login-get', (err, data) =>
       @apiCall 'login-post',
         method: 'POST'
@@ -35,6 +50,27 @@ exports = module.exports = () ->
         , (err,body='') =>
           @authenticated = not not body.match(/Welcome/ig)
           callback(@authenticated)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # Method to pull transcript from the site
 
   pullTranscript: (userId, userPass, callback=(()->return)) ->
     makeCall = ()=>
@@ -62,6 +98,32 @@ exports = module.exports = () ->
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # Methods for pulling classes not sorted by term
+  #
+  # Each will pull the transcript if nessisary,
+  # thus needs to recieve user credentials
+  #
+  #
+
+
+
+  # Get the classes and return a dep->classlist map as well
+  # as an array classlist
+  #
   getTranscriptClasses: (userId, userPass, callback=(()->return)) ->
     if not @transcriptRaw
       @pullTranscript userId, userPass, (err)=>
@@ -69,32 +131,133 @@ exports = module.exports = () ->
           return callback err
         if not @authenticated
           return callback new Error 'Incorrect authentication credentials'
-        @processTranscriptRaw(callback)
+        [err, classList, classMap] = @_processTranscriptRaw(@transcriptRaw)
+        callback(err, classList, classMap)
     else
-      @processTranscriptRaw(callback)
-
-
-
-
-  processTranscriptRaw: (callback) ->
-    fs.writeFile './tempTranscript.html', @transcriptRaw, (err) =>
-      if err then return callback(err)
-      err = null
-      classList = []
-      classMap = {}
-      classRegex = '<TR>\\n<TD\\sCLASS="dddefault">([A-Z]+)</TD>\\n<TD\\s(?:COLSPAN="2"\\s)?CLASS="dddefault">([0-9X]+)</TD>'
-
-      classesRaw = @transcriptRaw.match new RegExp classRegex, 'ig'
-      for classInfo in classesRaw
-        info   = (classInfo.match new RegExp classRegex, 'i') || []
-        dep    = info[1]||''
-        number = info[2]||''
-        classList.push number: number, department: dep
-        if classMap[dep] then classMap[dep].push number else classMap[dep] = [number]
+      [err, classList, classMap] = @_processTranscriptRaw(@transcriptRaw)
       callback(err, classList, classMap)
 
 
 
+  # Private method used to form the classList and classMap for
+  # a given transcript, or transcript fragment
+  #
+  # Returns [err, classList, classMap] for passed transcript
+
+  _processTranscriptRaw: (rawTranscript) ->
+    err = null
+    classList = []
+    classMap = {}
+    classRegex = '<TR>\\n<TD\\sCLASS="dddefault">([A-Z]+)</TD>\\n<TD\\s(?:COLSPAN="2"\\s)?CLASS="dddefault">([0-9A-Z]+)</TD>'
+
+    classesRaw = rawTranscript.match new RegExp classRegex, 'ig'
+    if not classesRaw
+      return [err, classList, classMap]
+    for classInfo in classesRaw
+      info   = (classInfo.match new RegExp classRegex, 'i') || []
+      dep    = info[1]||''
+      number = info[2]||''
+      classList.push number: number, department: dep
+      chunk = {number: number}
+      if classMap[dep] then classMap[dep].push chunk else classMap[dep] = [chunk]
+    [err, classList, classMap]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # Methods for pulling classes by term
+
+  #
+  # The following are for extracting an object of the form
+  # { `term`: { `dep`: [`numbers`] } }
+  #
+
+
+  # Public function callable to return the term -> class map
+  #
+  # Callback is called with (err, termClassMap)
+
+  getClassesByTerm: (userId, userPass, callback=(()->return)) ->
+    if not @transcriptRaw
+      @pullTranscript userId, userPass, (err)=>
+        if err
+          return callback err
+        if not @authenticated
+          return callback new Error 'Incorrect authentication credentials'
+        [err, termClassMap] = @_pullTermsAndClasses(@transcriptRaw)
+        callback(err, termClassMap)
+    else
+      [err, termClassMap] = @_pullTermsAndClasses(@transcriptRaw)
+      callback(err, termClassMap)
+
+
+
+  # Private method used to actually parse the transcript into term->class map
+  #
+  # Returns [err, termClassMap] for passed transcript
+
+  _pullTermsAndClasses: (rawTranscript) ->
+    termRegex = /<SPAN class="fieldOrangetextbold">([^<]+?):?<\/SPAN>/gi
+    termsAndList = rawTranscript.split termRegex
+    termsAndList = termsAndList[1..]
+
+    termClassMap = {}
+
+    # Cycle through the terms we found and create their class lists
+    for index in [0..(termsAndList.length-1)] by 2
+      termName = termsAndList[index].replace(/Term:\s*/, '')
+      termHTML = termsAndList[index+1]||''
+      [err, classList, classMap] = @_processTranscriptRaw(termHTML)
+      termClassMap[termName] = classMap
+
+    [err, termClassMap]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # Base API low-level functions
+
+
+
+  # Download wrapper
+  #
+  # Accepts a condenced list of arguments
+  # and expands them to something the
+  # downloader can use
 
   apiCall: (method, data={}, callback) ->
     if typeof data is 'function' and not callback
@@ -106,7 +269,16 @@ exports = module.exports = () ->
     @download(url, data, method, callback)
 
 
+
+
   # Internal Downloader method
+  #
+  # Parses and constructs request
+  # arguments and options, which are
+  # then passed to the 'request' method
+  #
+  # callback is passed in raw
+
   download: (url, data, method, callback) ->
     # Options:
     #   url: String url to hit
